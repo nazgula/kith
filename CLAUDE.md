@@ -43,6 +43,7 @@ public/          # Static assets
 npm run dev      # Start dev server (http://localhost:3000)
 npm run build    # Production build
 npm run lint     # Run ESLint
+npm test         # Run tests (Vitest)
 ```
 
 ## Conventions
@@ -53,6 +54,12 @@ npm run lint     # Run ESLint
 - Tailwind utility classes only — no custom CSS files unless absolutely necessary
 - TypeScript strict mode — no `any`, no `@ts-ignore`
 - All agent/task/project domain types live in `src/types/`
+
+## Working Rules
+
+- **Do not change architecture without asking explicitly**
+- **Do not install libraries without asking explicitly**
+- **Prefer short, concise solutions when possible**
 
 ## Next.js Notes
 
