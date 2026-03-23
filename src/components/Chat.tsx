@@ -141,16 +141,40 @@ export function Chat() {
     }
 
     addMessage(
-      makeMsg("system", "Judge rejected the spec. Discuss the feedback with the Spec Writer, or type /approve to override.")
+      makeMsg("system", "Judge rejected the spec. The Spec Writer is reviewing the feedback...")
     );
 
-    // Inject feedback into conversation for Spec Writer context
-    const feedbackMsg = makeMsg(
-      "user",
-      `The Judge rejected your spec with this feedback:\n\n${verdict.fullResponse}\n\nAddress these issues — either by asking the user for clarification or by revising the spec directly.`,
-      "user"
-    );
-    setMessages((prev) => [...prev, feedbackMsg]);
+    // Inject feedback into conversation for Spec Writer (not shown as user bubble)
+    const feedbackContent = `The Judge rejected your spec with this feedback:\n\n${verdict.fullResponse}\n\nAddress these issues — either by asking the user for clarification or by revising the spec directly.`;
+    const feedbackMsg = makeMsg("user", feedbackContent, "user");
+    // Add to messages silently (for API context) but don't show it — it's internal routing
+    feedbackMsg.agent = "system";
+    feedbackMsg.content = "[Judge feedback forwarded to Spec Writer]";
+
+    // Call Spec Writer with the feedback so it responds immediately
+    const allMsgs = [...messagesRef.current, feedbackMsg];
+    // For the API, include the real feedback content
+    const apiMessages = allMsgs
+      .filter((m) => m.agent !== "system" || m === feedbackMsg)
+      .map((m) => ({
+        role: m.role,
+        content: m === feedbackMsg ? feedbackContent : m.content,
+      }));
+
+    try {
+      const writerResponse = await callAgent("spec-writer.md", apiMessages);
+      const writerMsg = makeMsg("spec-writer", writerResponse);
+
+      setMessages((prev) => [...prev, feedbackMsg, writerMsg]);
+
+      // Check if the Writer immediately revised the spec
+      if (detectSpec(writerResponse)) {
+        await handleJudgeFlow(writerResponse, [...allMsgs, writerMsg]);
+      }
+    } catch (err) {
+      setMessages((prev) => [...prev, feedbackMsg]);
+      addMessage(makeMsg("system", `Spec Writer error: ${err instanceof Error ? err.message : "unknown"}. Type /approve to override or continue the conversation.`));
+    }
   }, [addMessage]);
 
   const sendMessage = useCallback(
