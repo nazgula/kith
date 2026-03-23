@@ -1,31 +1,26 @@
 import { NextRequest } from "next/server";
-import { getProviderForModel } from "@/lib/ai/registry";
-import type { ChatRequest, ChatResponse } from "@/types/ai";
+import { callAgent } from "@/lib/agent-api";
+import type { AgentRequest, AgentResponse } from "@/types/chat";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as ChatRequest;
-    const { messages, model } = body;
+    const body = (await request.json()) as AgentRequest;
+    const { agentPromptFile, messages } = body;
 
-    if (!messages?.length || !model) {
+    if (!messages?.length || !agentPromptFile) {
       return Response.json(
-        { error: "messages and model are required" },
+        { error: "agentPromptFile and messages are required" },
         { status: 400 }
       );
     }
 
-    const provider = getProviderForModel(model);
-    const content = await provider.chat(messages, model);
-
-    const response: ChatResponse = {
-      message: { role: "assistant", content },
-      model,
-    };
+    const content = await callAgent({ agentPromptFile, messages });
+    const response: AgentResponse = { content };
 
     return Response.json(response);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal server error";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, content: "" } as AgentResponse, { status: 500 });
   }
 }
