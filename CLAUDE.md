@@ -1,10 +1,6 @@
-# Kith — Agent Collaboration Platform
+# Kith
 
-## Project Overview
-
-Kith is a multi-agent system where AI agents with distinct roles collaborate on tasks. The current implementation is a **Spec Writer + Judge** pipeline: the user describes an idea through a web chat interface, the Spec Writer agent interviews them to extract a structured specification, and the Judge agent evaluates the spec for buildability. The system enforces an information barrier — the Judge only sees the spec markdown, never the conversation.
-
-**Core innovation:** intelligent context routing — messages decomposed into semantic chunks, agents receive only what's relevant at the appropriate depth (title / summary / detail). Validated in POC (`src/lib/poc/`), not yet integrated into the web flow.
+> For system architecture, see `docs/architecture.md`
 
 ## Stack
 
@@ -18,39 +14,6 @@ Kith is a multi-agent system where AI agents with distinct roles collaborate on 
 | Testing | Vitest |
 | Linting | ESLint 9 (eslint-config-next) |
 | Package Manager | npm |
-
-## Project Structure
-
-```
-src/
-  app/
-    layout.tsx              # Root layout
-    page.tsx                # Chat page
-    api/
-      chat/route.ts         # Agent API (Spec Writer + Judge)
-      session/route.ts      # Session persistence (conversation, judge history, specs)
-  components/
-    Chat.tsx                # Main chat with two-agent flow
-    ChatInput.tsx           # Prompt box
-    ChatMessage.tsx         # Message bubble with agent badges
-    SystemMessage.tsx       # Muted system status messages
-  lib/
-    agent-api.ts            # Reads .md prompt from disk, calls Claude
-    claude.ts               # Anthropic SDK wrapper
-    router.ts               # Spec detection, extraction, verdict parsing (plain code, no LLM)
-    storage.ts              # Filesystem persistence to data/
-    ai/                     # Provider abstraction (models, registry)
-    poc/                    # Context compiler + agent relevance POC scripts
-  types/
-    chat.ts                 # ChatMessage, JudgeResult, AgentRequest/Response
-    ai.ts                   # AIModel, AIProvider (generic provider types)
-agents/
-  spec-writer.md            # Spec Writer system prompt
-  spec-judge.md             # Judge system prompt
-docs/
-  done/                     # Completed/superseded specs and handoff notes
-data/                       # Runtime data (gitignored) — conversation.json, judge-history.json, specs
-```
 
 ## Development
 

@@ -113,6 +113,69 @@ Filesystem-based (`data/` directory, gitignored):
 - **Agents self-select** — broadcast context at summary level, let agents decide involvement. Validated in POC.
 - **Build the core first** — validate each piece (compiler, routing, agents) before connecting them.
 
+## Project Structure
+
+```
+src/
+  app/
+    layout.tsx              # Root layout
+    page.tsx                # Chat page
+    api/
+      chat/route.ts         # Agent API (Spec Writer + Judge)
+      session/route.ts      # Session persistence
+  components/
+    Chat.tsx                # Main chat with two-agent flow
+    ChatInput.tsx           # Prompt box
+    ChatMessage.tsx         # Message bubble with agent badges
+    SystemMessage.tsx       # Muted system status messages
+  lib/
+    agent-api.ts            # Reads .md prompt from disk, calls Claude
+    claude.ts               # Anthropic SDK wrapper
+    router.ts               # Spec detection, extraction, verdict parsing
+    storage.ts              # Filesystem persistence to data/
+    ai/                     # Provider abstraction (models, registry)
+    poc/                    # Context compiler + agent relevance POC scripts
+  types/
+    chat.ts                 # ChatMessage, JudgeResult, AgentRequest/Response
+    ai.ts                   # AIModel, AIProvider
+  cli/
+    kith.ts                 # CLI entry point (alternative to web UI)
+agents/
+  spec-writer.md            # Spec Writer system prompt
+  spec-judge.md             # Judge system prompt
+docs/
+  architecture.md           # This file
+  done/                     # Completed/superseded specs
+data/                       # Runtime data (gitignored)
+```
+
+## Vision / Next Steps
+
+### Phase 2 — Full Agent Team
+
+- **Orchestrator agent** — task planning with two-ledger pattern (Task Ledger + Progress Ledger, from Microsoft Magentic-One). Decomposes user requests into tasks, assigns to agents, re-plans when progress stalls.
+- **Coder agent** — builds from approved specs. Writes code, runs tests, iterates.
+- **Researcher agent** — web search, documentation lookup, freshness cache.
+- **Context Compiler as a service** — integrate the validated POC into the live flow. Every user message gets decomposed; agents self-select from summaries.
+
+### Phase 2 — Communication
+
+- **A2A protocol** for inter-agent communication (currently agents don't talk directly — Router mediates)
+- **MCP** for tool/resource access (file system, web search, git, test runners)
+- Agent discovery via Agent Cards (`/.well-known/agent.json`)
+
+### Phase 3 — Self-Improving System
+
+- **Principle Evolution** — log conflicts between agents and human overrides. Extract patterns as candidate principles. Test them. Promote validated principles into agent system prompts.
+- **Progressive summarization** — as context grows, demote inactive chunks from detail → summary → title. Agents can request expansion on demand.
+- **Operational intelligence** — detect patterns like "Agent A's output frequently triggers clarification from Agent B" and refine agent boundaries.
+
+### Core Innovation (validated, not yet integrated)
+
+**Intelligent context routing** — messages decomposed into semantic chunks at three depth levels (title ~10 tokens, summary ~50-150 tokens, detail = full content). Agents self-select which chunks are relevant to them. Nobody else does sub-message-level routing.
+
+Design principle: broadcast at summary level, let agents decide involvement. Like a real team where the programmer pulls in QA mid-feature because things got complicated.
+
 ## Research References
 
 - A2A protocol: https://a2a-protocol.org/latest/specification/
