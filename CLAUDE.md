@@ -84,6 +84,19 @@ npx tsx --env-file=.env.local src/cli/kith.ts --resume
 - After 2 failed rollback-and-rewrite attempts, stop and ask for guidance
 - **Never install new libraries just to make a test pass**
 
+## Spec Lifecycle
+
+When a spec in `docs/` (NOT `docs/architecture.md`) has been fully built and all tests pass:
+1. Move the spec file to `docs/done/`
+2. Commit the move
+
+If the spec was **partially** implemented (some features built and tested, others not):
+1. Do NOT move the spec file
+2. Add an `## Open Issues` section at the bottom of the spec listing what's missing
+3. Inform the user: "Spec partially implemented. Open issues added to [filename]. Please review."
+4. Wait for the user to handle the open issues
+5. When all open issues are resolved and tests pass, remove the `## Open Issues` section and move to `docs/done/`
+
 ## Context & Session Management
 
 - If context is getting heavy and data is being lost, create a breakpoint:
