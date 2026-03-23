@@ -61,6 +61,23 @@ npm test         # Run tests (Vitest)
 - **Do not install libraries without asking explicitly**
 - **Prefer short, concise solutions when possible**
 
+## Merge Workflow
+
+When ready to merge a branch into main:
+
+1. Push the branch and open a PR: `gh pr create --base main --fill`
+2. Wait for CI checks (lint, typecheck, tests) — they must all pass
+3. Copilot reviews automatically — wait ~30 seconds
+4. Check for review comments: `gh pr view --comments`
+5. If Copilot left comments:
+   - Read each comment
+   - Fix the code
+   - Commit and push: `git add -A && git commit -m "address review feedback" && git push`
+   - Copilot re-reviews on new push. Repeat from step 4.
+6. If CI passes and no unresolved comments: `gh pr merge --squash --delete-branch`
+
+Do not merge if CI is failing. Fix the issue first.
+
 ## Next.js Notes
 
 > This project uses Next.js 16 with the App Router. APIs and conventions may differ from older versions. Before writing any Next.js-specific code, check `node_modules/next/dist/docs/` for up-to-date guidance.
