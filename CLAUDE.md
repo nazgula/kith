@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-**Kith** is a collaboration platform where AI agents with distinct roles form task forces to work on projects together. Each agent operates within a defined role (e.g., planner, researcher, executor, reviewer) and coordinates with other agents to accomplish shared goals. The platform manages agent sessions, task delegation, inter-agent communication, and project state.
+Kith is a multi-agent system where AI agents with distinct roles collaborate on tasks. The current implementation is a **Spec Writer + Judge** pipeline: the user describes an idea through a web chat interface, the Spec Writer agent interviews them to extract a structured specification, and the Judge agent evaluates the spec for buildability. The system enforces an information barrier — the Judge only sees the spec markdown, never the conversation.
+
+**Core innovation:** intelligent context routing — messages decomposed into semantic chunks, agents receive only what's relevant at the appropriate depth (title / summary / detail). Validated in POC (`src/lib/poc/`), not yet integrated into the web flow.
 
 ## Stack
 
@@ -12,6 +14,8 @@
 | Language | TypeScript 5 |
 | UI | React 19 |
 | Styling | Tailwind CSS 4 |
+| AI SDK | @anthropic-ai/sdk |
+| Testing | Vitest |
 | Linting | ESLint 9 (eslint-config-next) |
 | Package Manager | npm |
 
@@ -19,23 +23,34 @@
 
 ```
 src/
-  app/           # Next.js App Router pages and layouts
-    layout.tsx   # Root layout
-    page.tsx     # Home page
-  components/    # Shared React components
-  lib/           # Utilities, helpers, business logic
-  types/         # Shared TypeScript types
-public/          # Static assets
+  app/
+    layout.tsx              # Root layout
+    page.tsx                # Chat page
+    api/
+      chat/route.ts         # Agent API (Spec Writer + Judge)
+      session/route.ts      # Session persistence (conversation, judge history, specs)
+  components/
+    Chat.tsx                # Main chat with two-agent flow
+    ChatInput.tsx           # Prompt box
+    ChatMessage.tsx         # Message bubble with agent badges
+    SystemMessage.tsx       # Muted system status messages
+  lib/
+    agent-api.ts            # Reads .md prompt from disk, calls Claude
+    claude.ts               # Anthropic SDK wrapper
+    router.ts               # Spec detection, extraction, verdict parsing (plain code, no LLM)
+    storage.ts              # Filesystem persistence to data/
+    ai/                     # Provider abstraction (models, registry)
+    poc/                    # Context compiler + agent relevance POC scripts
+  types/
+    chat.ts                 # ChatMessage, JudgeResult, AgentRequest/Response
+    ai.ts                   # AIModel, AIProvider (generic provider types)
+agents/
+  spec-writer.md            # Spec Writer system prompt
+  spec-judge.md             # Judge system prompt
+docs/
+  done/                     # Completed/superseded specs and handoff notes
+data/                       # Runtime data (gitignored) — conversation.json, judge-history.json, specs
 ```
-
-## Key Concepts
-
-- **Agent** — an AI participant with a defined role and capabilities
-- **Role** — the function an agent plays in a task force (e.g., Planner, Researcher, Executor, Critic, Coordinator)
-- **Task Force** — a group of agents assembled to work on a specific project or goal
-- **Project** — the top-level unit of work, containing tasks, agents, and shared context
-- **Task** — a discrete unit of work delegated to one or more agents
-- **Handoff** — the passing of context or work from one agent to another
 
 ## Development
 
@@ -46,6 +61,20 @@ npm run lint     # Run ESLint
 npm test         # Run tests (Vitest)
 ```
 
+### Running POC scripts
+
+```bash
+npx tsx --env-file=.env.local src/lib/poc/context-compiler.ts
+npx tsx --env-file=.env.local src/lib/poc/agent-relevance.ts
+```
+
+### Running CLI (alternative to web UI)
+
+```bash
+npx tsx --env-file=.env.local src/cli/kith.ts
+npx tsx --env-file=.env.local src/cli/kith.ts --resume
+```
+
 ## Conventions
 
 - Use the App Router (`src/app/`) — no Pages Router
@@ -53,13 +82,39 @@ npm test         # Run tests (Vitest)
 - Prefer server components by default; use `"use client"` only when needed (interactivity, browser APIs)
 - Tailwind utility classes only — no custom CSS files unless absolutely necessary
 - TypeScript strict mode — no `any`, no `@ts-ignore`
-- All agent/task/project domain types live in `src/types/`
+- Domain types live in `src/types/`
+- Agent system prompts are `.md` files in `agents/`
+- Light mode by default; dark mode via `.dark` class on `<html>`
 
 ## Working Rules
 
 - **Do not change architecture without asking explicitly**
 - **Do not install libraries without asking explicitly**
 - **Prefer short, concise solutions when possible**
+- **Never read `.env` files to extract secrets** — configure tools to load them (e.g. Vite's `loadEnv`, Node's `--env-file`)
+
+## Git & Branching
+
+- **Branch per feature** — work on feature branches, not main
+- **Atomic commits** — each commit should be a coherent, working unit
+- **Commit often** — especially before starting risky changes
+
+## Testing
+
+- All tests run via `npm test` (Vitest)
+- Write unit tests for new logic. Write live SDK tests for agent behavior (use Haiku for cost).
+- **Run tests and fix until all pass before committing**
+- If a test fails twice after attempted fixes, stop and reconsider the approach
+- If a previously passing test breaks, consider rolling back to the last working commit and trying a different approach
+- After 2 failed rollback-and-rewrite attempts, stop and ask for guidance
+- **Never install new libraries just to make a test pass**
+
+## Context & Session Management
+
+- If context is getting heavy and data is being lost, create a breakpoint:
+  1. Commit current working state
+  2. Write a handoff document for the next session
+  3. Stop and resume in a new session
 
 ## Merge Workflow
 
