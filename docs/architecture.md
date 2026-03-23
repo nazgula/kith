@@ -151,6 +151,8 @@ data/                       # Runtime data (gitignored)
 
 ## Vision / Next Steps
 
+> For the full Phase 1-3 design spec including detailed agent definitions, structured message schemas, and communication protocols, see `docs/done/architecture-spec.md`.
+
 ### Phase 2 — Full Agent Team
 
 - **Orchestrator agent** — task planning with two-ledger pattern (Task Ledger + Progress Ledger, from Microsoft Magentic-One). Decomposes user requests into tasks, assigns to agents, re-plans when progress stalls.

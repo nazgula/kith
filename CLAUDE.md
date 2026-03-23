@@ -1,6 +1,18 @@
 # Kith
 
-> For system architecture, see `docs/architecture.md`
+## Documentation Map
+
+Read these when you need context beyond this file. Don't guess — check the relevant doc.
+
+| File | What it is | When to read it |
+|---|---|---|
+| `CLAUDE.md` | This file — dev rules, conventions, commands | Auto-loaded every session |
+| `AGENTS.md` | Shared agent config, how to add agents | Adding/modifying agents |
+| `docs/architecture.md` | System design, current state, project structure, vision | Understanding what Kith is or planning new features |
+| `agents/spec-writer.md` | Spec Writer system prompt (loaded at runtime) | Changing how the Writer interviews or drafts |
+| `agents/spec-judge.md` | Judge system prompt (loaded at runtime) | Changing evaluation criteria or output format |
+| `docs/done/architecture-spec.md` | Full Phase 1-3 design spec (agent defs, message schemas, protocols) | Designing new agents, communication, or data structures |
+| `docs/done/` | Completed specs and session handoffs | Historical reference only |
 
 ## Stack
 
