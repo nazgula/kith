@@ -76,8 +76,8 @@ npx tsx --env-file=.env.local src/cli/kith.ts --resume
 
 - If context is getting heavy and data is being lost, create a breakpoint:
   1. Commit current working state
-  2. Write a handoff document for the next session
-  3. Stop and resume in a new session
+  2. Write a handoff document to `docs/` summarizing: what was done, what's in progress, what's next, any gotchas
+  3. Tell the user: "Context is getting heavy. I've committed and written a handoff. Please start a new session — the handoff doc has everything needed to continue."
 
 ## Merge Workflow
 
