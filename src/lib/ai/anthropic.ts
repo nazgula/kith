@@ -1,17 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { AIProvider, AIModel, Message } from "@/types/ai";
-
-const MODELS: AIModel[] = [
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic" },
-  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", provider: "anthropic" },
-];
+import type { AIProvider, Message } from "@/types/ai";
+import { ALL_MODELS } from "./models";
 
 export function createAnthropicProvider(apiKey: string): AIProvider {
   const client = new Anthropic({ apiKey });
 
   return {
     name: "Anthropic",
-    models: MODELS,
+    models: ALL_MODELS.filter((m) => m.provider === "anthropic"),
 
     async chat(
       messages: Pick<Message, "role" | "content">[],

@@ -36,7 +36,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 rounded-2xl border border-zinc-700 bg-zinc-800 p-2">
+    <div className="flex items-end gap-2 rounded-2xl border border-zinc-300 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-800">
       <textarea
         ref={textareaRef}
         value={input}
@@ -45,7 +45,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         placeholder="Type a message..."
         disabled={disabled}
         rows={1}
-        className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 disabled:opacity-50"
+        className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 disabled:opacity-50 dark:text-zinc-100 dark:placeholder:text-zinc-500"
       />
       <button
         onClick={handleSubmit}

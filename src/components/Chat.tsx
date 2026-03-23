@@ -13,6 +13,8 @@ export function Chat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,7 +35,7 @@ export function Chat() {
 
       try {
         const body: ChatRequest = {
-          messages: [...messages, userMessage].map((m) => ({
+          messages: [...messagesRef.current, userMessage].map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -67,14 +69,14 @@ export function Chat() {
         setLoading(false);
       }
     },
-    [messages, selectedModel]
+    [selectedModel]
   );
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-3">
-        <h1 className="text-lg font-semibold text-zinc-100">Kith</h1>
+      <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
+        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Kith</h1>
         <ModelSelector
           models={ALL_MODELS}
           selected={selectedModel}
@@ -87,10 +89,10 @@ export function Chat() {
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <h2 className="text-xl font-medium text-zinc-300">
+              <h2 className="text-xl font-medium text-zinc-600 dark:text-zinc-300">
                 Start a conversation
               </h2>
-              <p className="mt-2 text-sm text-zinc-500">
+              <p className="mt-2 text-sm text-zinc-400 dark:text-zinc-500">
                 Using {selectedModel.name} via {selectedModel.provider}
               </p>
             </div>
@@ -102,7 +104,7 @@ export function Chat() {
             ))}
             {loading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl bg-zinc-800 px-4 py-3 text-sm text-zinc-400">
+                <div className="rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                   Thinking...
                 </div>
               </div>
@@ -114,13 +116,13 @@ export function Chat() {
 
       {/* Error */}
       {error && (
-        <div className="mx-6 mb-2 rounded-lg bg-red-900/30 px-4 py-2 text-sm text-red-400">
+        <div className="mx-6 mb-2 rounded-lg bg-red-100 px-4 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       )}
 
       {/* Input */}
-      <div className="border-t border-zinc-800 px-6 py-4">
+      <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
         <div className="mx-auto max-w-3xl">
           <ChatInput onSend={sendMessage} disabled={loading} />
         </div>

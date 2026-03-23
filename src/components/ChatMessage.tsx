@@ -15,11 +15,11 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
           isUser
             ? "bg-blue-600 text-white"
-            : "bg-zinc-800 text-zinc-200"
+            : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
         }`}
       >
         {!isUser && (
-          <span className="mb-1 block text-xs font-medium text-zinc-400">
+          <span className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
             Assistant
           </span>
         )}
