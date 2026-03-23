@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { ChatMessage as ChatMessageType, AgentRequest, AgentResponse, JudgeResult } from "@/types/chat";
+import type { ChatMessage as ChatMessageType, AgentRequest, AgentResponse, JudgeResult, Project } from "@/types/chat";
 import { detectSpec, extractSpec, parseVerdict } from "@/lib/router";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
+import { ProjectSelector } from "./ProjectSelector";
+import { SpecViewer } from "./SpecViewer";
 
 function makeMsg(
   agent: ChatMessageType["agent"],
@@ -33,7 +35,7 @@ async function callAgent(agentPromptFile: string, messages: { role: string; cont
   return data.content;
 }
 
-async function saveSession(action: string, payload: Record<string, unknown>) {
+async function sessionAction(action: string, payload: Record<string, unknown>) {
   await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -42,9 +44,12 @@ async function saveSession(action: string, payload: Record<string, unknown>) {
 }
 
 export function Chat() {
+  const [project, setProject] = useState<Project | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [approvedSpec, setApprovedSpec] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
   const rejectionCountRef = useRef(0);
@@ -55,44 +60,86 @@ export function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load session on mount
+  // Load project list on mount
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/session");
         const data = await res.json();
-        if (data.conversation?.length > 0) {
-          setMessages([
-            makeMsg("system", `Session restored — ${data.conversation.length} messages loaded`),
-            ...data.conversation,
-          ]);
-          rejectionCountRef.current = (data.judgeHistory ?? []).filter(
-            (j: JudgeResult) => j.verdict === "REJECTED" || j.verdict === "UNKNOWN"
-          ).length;
-        } else {
-          setMessages([makeMsg("system", "What are you building? Describe your idea.")]);
-        }
+        setProjects(data.projects ?? []);
       } catch {
-        setMessages([makeMsg("system", "What are you building? Describe your idea.")]);
+        // ignore
       }
       setInitialized(true);
     })();
   }, []);
 
-  // Persist conversation whenever messages change (skip system-only states)
+  // Load project session when project is selected
+  const loadProject = useCallback(async (p: Project) => {
+    setProject(p);
+    setMessages([]);
+    setApprovedSpec(null);
+    rejectionCountRef.current = 0;
+    lastSpecDraftRef.current = "";
+
+    try {
+      const res = await fetch(`/api/session?projectId=${p.id}`);
+      const data = await res.json();
+
+      if (data.approvedSpec) {
+        setApprovedSpec(data.approvedSpec);
+      }
+
+      if (data.conversation?.length > 0) {
+        setMessages([
+          makeMsg("system", `Session restored — ${data.conversation.length} messages loaded`),
+          ...data.conversation,
+        ]);
+        rejectionCountRef.current = (data.judgeHistory ?? []).filter(
+          (j: JudgeResult) => j.verdict === "REJECTED" || j.verdict === "UNKNOWN"
+        ).length;
+      } else {
+        setMessages([makeMsg("system", "What are you building? Describe your idea.")]);
+      }
+    } catch {
+      setMessages([makeMsg("system", "What are you building? Describe your idea.")]);
+    }
+  }, []);
+
+  const handleNewProject = useCallback(async (name: string) => {
+    const res = await fetch("/api/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create-project", name }),
+    });
+    const data = await res.json();
+    if (data.project) {
+      setProjects((prev) => [...prev, data.project]);
+      loadProject(data.project);
+    }
+  }, [loadProject]);
+
+  // Persist conversation whenever messages change
   useEffect(() => {
-    if (!initialized) return;
+    if (!project) return;
     const persistable = messages.filter((m) => m.agent !== "system");
     if (persistable.length > 0) {
-      saveSession("save-conversation", { messages: persistable });
+      sessionAction("save-conversation", { projectId: project.id, messages: persistable });
     }
-  }, [messages, initialized]);
+  }, [messages, project]);
 
   const addMessage = useCallback((msg: ChatMessageType) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
-  const handleJudgeFlow = useCallback(async (specWriterResponse: string, currentMessages: ChatMessageType[]) => {
+  const handleSpecApproved = useCallback(async (specMarkdown: string) => {
+    setApprovedSpec(specMarkdown);
+    if (project) {
+      await sessionAction("save-approved-spec", { projectId: project.id, markdown: specMarkdown });
+    }
+  }, [project]);
+
+  const handleJudgeFlow = useCallback(async (specWriterResponse: string) => {
     addMessage(makeMsg("system", "Spec draft detected. Sending to Judge..."));
 
     const specMarkdown = extractSpec(specWriterResponse);
@@ -110,25 +157,24 @@ export function Chat() {
 
     const verdict = parseVerdict(judgeResponse);
 
-    // Save judge result
-    const judgeResult: JudgeResult = {
-      verdict: verdict.status,
-      feedback: verdict.fullResponse,
-      specMarkdown,
-      timestamp: new Date().toISOString(),
-    };
-    await saveSession("save-judge-result", { result: judgeResult });
+    if (project) {
+      const judgeResult: JudgeResult = {
+        verdict: verdict.status,
+        feedback: verdict.fullResponse,
+        specMarkdown,
+        timestamp: new Date().toISOString(),
+      };
+      await sessionAction("save-judge-result", { projectId: project.id, result: judgeResult });
+    }
 
-    // Show judge response
     addMessage(makeMsg("judge", verdict.fullResponse));
 
     if (verdict.status === "APPROVED") {
-      addMessage(makeMsg("system", "Spec approved!"));
-      await saveSession("save-approved-spec", { markdown: specMarkdown });
+      addMessage(makeMsg("system", "Spec approved! View and download below."));
+      await handleSpecApproved(specMarkdown);
       return;
     }
 
-    // REJECTED or UNKNOWN
     if (verdict.status === "UNKNOWN") {
       addMessage(makeMsg("system", "Judge response format unexpected. Treating as rejection."));
     }
@@ -144,16 +190,12 @@ export function Chat() {
       makeMsg("system", "Judge rejected the spec. The Spec Writer is reviewing the feedback...")
     );
 
-    // Inject feedback into conversation for Spec Writer (not shown as user bubble)
     const feedbackContent = `The Judge rejected your spec with this feedback:\n\n${verdict.fullResponse}\n\nAddress these issues — either by asking the user for clarification or by revising the spec directly.`;
     const feedbackMsg = makeMsg("user", feedbackContent, "user");
-    // Add to messages silently (for API context) but don't show it — it's internal routing
     feedbackMsg.agent = "system";
     feedbackMsg.content = "[Judge feedback forwarded to Spec Writer]";
 
-    // Call Spec Writer with the feedback so it responds immediately
     const allMsgs = [...messagesRef.current, feedbackMsg];
-    // For the API, include the real feedback content
     const apiMessages = allMsgs
       .filter((m) => m.agent !== "system" || m === feedbackMsg)
       .map((m) => ({
@@ -164,25 +206,25 @@ export function Chat() {
     try {
       const writerResponse = await callAgent("spec-writer.md", apiMessages);
       const writerMsg = makeMsg("spec-writer", writerResponse);
-
       setMessages((prev) => [...prev, feedbackMsg, writerMsg]);
 
-      // Check if the Writer immediately revised the spec
       if (detectSpec(writerResponse)) {
-        await handleJudgeFlow(writerResponse, [...allMsgs, writerMsg]);
+        await handleJudgeFlow(writerResponse);
       }
     } catch (err) {
       setMessages((prev) => [...prev, feedbackMsg]);
       addMessage(makeMsg("system", `Spec Writer error: ${err instanceof Error ? err.message : "unknown"}. Type /approve to override or continue the conversation.`));
     }
-  }, [addMessage]);
+  }, [addMessage, project, handleSpecApproved]);
 
   const sendMessage = useCallback(
     async (content: string) => {
-      // /approve override
       if (content === "/approve") {
         if (lastSpecDraftRef.current) {
-          await saveSession("save-override-spec", { markdown: lastSpecDraftRef.current });
+          if (project) {
+            await sessionAction("save-override-spec", { projectId: project.id, markdown: lastSpecDraftRef.current });
+          }
+          setApprovedSpec(lastSpecDraftRef.current);
           addMessage(makeMsg("system", "Spec saved with user override. The Judge did not approve this version."));
         } else {
           addMessage(makeMsg("system", "No spec to approve yet. Continue the interview."));
@@ -195,7 +237,6 @@ export function Chat() {
       setLoading(true);
 
       try {
-        // Build conversation for Spec Writer (exclude system messages)
         const allMsgs = [...messagesRef.current, userMsg];
         const apiMessages = allMsgs
           .filter((m) => m.agent !== "system")
@@ -205,9 +246,8 @@ export function Chat() {
         const writerMsg = makeMsg("spec-writer", writerResponse);
         addMessage(writerMsg);
 
-        // Check for spec
         if (detectSpec(writerResponse)) {
-          await handleJudgeFlow(writerResponse, [...allMsgs, writerMsg]);
+          await handleJudgeFlow(writerResponse);
         }
       } catch (err) {
         addMessage(
@@ -217,19 +257,41 @@ export function Chat() {
         setLoading(false);
       }
     },
-    [addMessage, handleJudgeFlow]
+    [addMessage, handleJudgeFlow, project]
   );
 
+  const handleBackToProjects = useCallback(() => {
+    setProject(null);
+    setMessages([]);
+    setApprovedSpec(null);
+  }, []);
+
+  if (!initialized) return null;
+
+  // Project selector screen
+  if (!project) {
+    return <ProjectSelector projects={projects} onSelect={loadProject} onNew={handleNewProject} />;
+  }
+
+  // Chat screen
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
-        <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Kith</h1>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleBackToProjects}
+            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            &larr; Projects
+          </button>
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{project.name}</h1>
+        </div>
         <span className="text-xs text-zinc-400">Spec Writer + Judge</span>
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      {/* Messages — scrollable */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
         <div className="mx-auto max-w-3xl space-y-4">
           {messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
@@ -245,8 +307,13 @@ export function Chat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+      {/* Spec viewer — shown when spec is approved */}
+      {approvedSpec && (
+        <SpecViewer markdown={approvedSpec} projectName={project.name} />
+      )}
+
+      {/* Input — sticky at bottom */}
+      <div className="sticky bottom-0 border-t border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="mx-auto max-w-3xl">
           <ChatInput onSend={sendMessage} disabled={loading} />
         </div>

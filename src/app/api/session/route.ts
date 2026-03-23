@@ -1,46 +1,74 @@
 import { NextRequest } from "next/server";
 import {
+  listProjects,
+  createProject,
+  getProject,
   loadConversation,
   saveConversation,
   loadJudgeHistory,
   appendJudgeHistory,
   saveApprovedSpec,
   saveOverrideSpec,
+  loadApprovedSpec,
 } from "@/lib/storage";
 import type { ChatMessage, JudgeResult } from "@/types/chat";
 
-// GET — load session (conversation + judge history)
-export async function GET() {
-  const conversation = loadConversation();
-  const judgeHistory = loadJudgeHistory();
-  return Response.json({ conversation, judgeHistory });
+// GET — load session or list projects
+export async function GET(request: NextRequest) {
+  const projectId = request.nextUrl.searchParams.get("projectId");
+
+  if (!projectId) {
+    // List all projects
+    return Response.json({ projects: listProjects() });
+  }
+
+  const project = getProject(projectId);
+  if (!project) {
+    return Response.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  const conversation = loadConversation(projectId);
+  const judgeHistory = loadJudgeHistory(projectId);
+  const approvedSpec = loadApprovedSpec(projectId);
+
+  return Response.json({ project, conversation, judgeHistory, approvedSpec });
 }
 
-// POST — save session data
+// POST — project actions + session data
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action } = body as { action: string };
+    const { action, projectId } = body as { action: string; projectId?: string };
+
+    if (action === "create-project") {
+      const { name } = body as { name: string; action: string };
+      const project = createProject(name || "Untitled Project");
+      return Response.json({ project });
+    }
+
+    if (!projectId) {
+      return Response.json({ error: "projectId is required" }, { status: 400 });
+    }
 
     switch (action) {
       case "save-conversation": {
-        const { messages } = body as { messages: ChatMessage[]; action: string };
-        saveConversation(messages);
+        const { messages } = body as { messages: ChatMessage[]; projectId: string; action: string };
+        saveConversation(projectId, messages);
         return Response.json({ ok: true });
       }
       case "save-judge-result": {
-        const { result } = body as { result: JudgeResult; action: string };
-        appendJudgeHistory(result);
+        const { result } = body as { result: JudgeResult; projectId: string; action: string };
+        appendJudgeHistory(projectId, result);
         return Response.json({ ok: true });
       }
       case "save-approved-spec": {
-        const { markdown } = body as { markdown: string; action: string };
-        saveApprovedSpec(markdown);
+        const { markdown } = body as { markdown: string; projectId: string; action: string };
+        saveApprovedSpec(projectId, markdown);
         return Response.json({ ok: true });
       }
       case "save-override-spec": {
-        const { markdown } = body as { markdown: string; action: string };
-        saveOverrideSpec(markdown);
+        const { markdown } = body as { markdown: string; projectId: string; action: string };
+        saveOverrideSpec(projectId, markdown);
         return Response.json({ ok: true });
       }
       default:

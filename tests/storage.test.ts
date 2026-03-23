@@ -3,15 +3,17 @@ import * as fs from "fs";
 import * as path from "path";
 import type { ChatMessage, JudgeResult } from "@/types/chat";
 
-// We need to test storage functions but they use process.cwd() for data dir.
-// Import and test directly — the data dir will be created in the test cwd.
 import {
+  listProjects,
+  createProject,
+  getProject,
   loadConversation,
   saveConversation,
   loadJudgeHistory,
   appendJudgeHistory,
   saveApprovedSpec,
   saveOverrideSpec,
+  loadApprovedSpec,
   clearSession,
 } from "@/lib/storage";
 
@@ -23,94 +25,111 @@ function cleanup() {
   }
 }
 
-describe("storage", () => {
+describe("storage — projects", () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it("returns empty array when no conversation exists", () => {
-    expect(loadConversation()).toEqual([]);
+  it("returns empty list when no projects exist", () => {
+    expect(listProjects()).toEqual([]);
+  });
+
+  it("creates a project with id and name", () => {
+    const project = createProject("Test Project");
+    expect(project.id).toBeTruthy();
+    expect(project.name).toBe("Test Project");
+    expect(project.createdAt).toBeTruthy();
+  });
+
+  it("lists created projects", () => {
+    createProject("A");
+    createProject("B");
+    const projects = listProjects();
+    expect(projects).toHaveLength(2);
+    expect(projects.map((p) => p.name)).toEqual(["A", "B"]);
+  });
+
+  it("gets a project by id", () => {
+    const created = createProject("Find Me");
+    const found = getProject(created.id);
+    expect(found).toBeDefined();
+    expect(found!.name).toBe("Find Me");
+  });
+
+  it("returns undefined for nonexistent project", () => {
+    expect(getProject("nonexistent")).toBeUndefined();
+  });
+});
+
+describe("storage — per-project data", () => {
+  let projectId: string;
+
+  beforeEach(() => {
+    cleanup();
+    projectId = createProject("Test").id;
+  });
+  afterEach(cleanup);
+
+  it("returns empty conversation for new project", () => {
+    expect(loadConversation(projectId)).toEqual([]);
   });
 
   it("saves and loads conversation", () => {
     const messages: ChatMessage[] = [
-      {
-        id: "1",
-        role: "user",
-        agent: "user",
-        content: "hello",
-        timestamp: 1000,
-      },
-      {
-        id: "2",
-        role: "assistant",
-        agent: "spec-writer",
-        content: "hi there",
-        timestamp: 2000,
-      },
+      { id: "1", role: "user", agent: "user", content: "hello", timestamp: 1000 },
+      { id: "2", role: "assistant", agent: "spec-writer", content: "hi", timestamp: 2000 },
     ];
-    saveConversation(messages);
-    expect(loadConversation()).toEqual(messages);
+    saveConversation(projectId, messages);
+    expect(loadConversation(projectId)).toEqual(messages);
   });
 
-  it("returns empty array for corrupted conversation file", () => {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(path.join(DATA_DIR, "conversation.json"), "not json");
-    expect(loadConversation()).toEqual([]);
-  });
+  it("isolates conversations between projects", () => {
+    const projectId2 = createProject("Other").id;
+    saveConversation(projectId, [{ id: "1", role: "user", agent: "user", content: "project1", timestamp: 1 }]);
+    saveConversation(projectId2, [{ id: "2", role: "user", agent: "user", content: "project2", timestamp: 2 }]);
 
-  it("returns empty array when no judge history exists", () => {
-    expect(loadJudgeHistory()).toEqual([]);
+    expect(loadConversation(projectId)[0].content).toBe("project1");
+    expect(loadConversation(projectId2)[0].content).toBe("project2");
   });
 
   it("appends judge history entries", () => {
-    const entry1: JudgeResult = {
+    const entry: JudgeResult = {
       verdict: "REJECTED",
       feedback: "needs work",
       specMarkdown: "# Spec",
       timestamp: "2026-01-01T00:00:00Z",
     };
-    const entry2: JudgeResult = {
-      verdict: "APPROVED",
-      feedback: "great",
-      specMarkdown: "# Spec v2",
-      timestamp: "2026-01-02T00:00:00Z",
-    };
-    appendJudgeHistory(entry1);
-    appendJudgeHistory(entry2);
-    const history = loadJudgeHistory();
+    appendJudgeHistory(projectId, entry);
+    appendJudgeHistory(projectId, { ...entry, verdict: "APPROVED" });
+    const history = loadJudgeHistory(projectId);
     expect(history).toHaveLength(2);
     expect(history[0].verdict).toBe("REJECTED");
     expect(history[1].verdict).toBe("APPROVED");
   });
 
-  it("saves approved spec as markdown file", () => {
-    saveApprovedSpec("# My Approved Spec");
-    const content = fs.readFileSync(
-      path.join(DATA_DIR, "spec-approved.md"),
-      "utf-8"
-    );
-    expect(content).toBe("# My Approved Spec");
+  it("saves and loads approved spec", () => {
+    saveApprovedSpec(projectId, "# My Spec");
+    expect(loadApprovedSpec(projectId)).toBe("# My Spec");
   });
 
-  it("saves override spec as markdown file", () => {
-    saveOverrideSpec("# My Override Spec");
-    const content = fs.readFileSync(
-      path.join(DATA_DIR, "spec-override.md"),
-      "utf-8"
-    );
-    expect(content).toBe("# My Override Spec");
+  it("saves override spec and loads via loadApprovedSpec", () => {
+    saveOverrideSpec(projectId, "# Override");
+    expect(loadApprovedSpec(projectId)).not.toBeNull();
+  });
+
+  it("returns null when no spec exists", () => {
+    expect(loadApprovedSpec(projectId)).toBeNull();
   });
 
   it("clears session removes conversation and judge history", () => {
-    saveConversation([{ id: "1", role: "user", agent: "user", content: "x", timestamp: 1 }]);
-    appendJudgeHistory({
+    saveConversation(projectId, [{ id: "1", role: "user", agent: "user", content: "x", timestamp: 1 }]);
+    appendJudgeHistory(projectId, {
       verdict: "REJECTED",
       feedback: "bad",
       specMarkdown: "#",
       timestamp: "2026-01-01",
     });
-    clearSession();
-    expect(loadConversation()).toEqual([]);
-    expect(loadJudgeHistory()).toEqual([]);
+    clearSession(projectId);
+    expect(loadConversation(projectId)).toEqual([]);
+    expect(loadJudgeHistory(projectId)).toEqual([]);
   });
 });

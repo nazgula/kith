@@ -24,3 +24,10 @@ export interface AgentResponse {
   content: string;
   error?: string;
 }
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+  approvedSpec?: string;
+}
