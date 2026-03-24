@@ -124,8 +124,7 @@ async function main() {
   // Main conversation loop
   while (true) {
     // Send to Spec Writer
-    let thinkingTimer: ReturnType<typeof setTimeout> | undefined;
-    thinkingTimer = setTimeout(() => {
+    const thinkingTimer = setTimeout(() => {
       process.stdout.write("[System] Still thinking...\n");
     }, 10000);
 
