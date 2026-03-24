@@ -106,20 +106,20 @@ If the spec was **partially** implemented (some features built and tested, other
 
 ## Merge Workflow
 
-When ready to merge a branch into main:
+When ready to merge a branch into main, run this loop until the PR is merged:
 
 1. Push the branch and open a PR: `gh pr create --base main --fill`
-2. Wait for CI checks (lint, typecheck, tests) — they must all pass
-3. Copilot reviews automatically — wait ~30 seconds
-4. Check for review comments: `gh pr view --comments`
+2. **Poll CI until complete:** run `gh pr checks <number>` — wait ~60 seconds between checks. Do not proceed until CI passes.
+3. If CI fails: read the failure, fix the code, commit and push, go back to step 2.
+4. Once CI passes, check for Copilot review comments: `gh api repos/{owner}/{repo}/pulls/{number}/comments`
 5. If Copilot left comments:
    - Read each comment
    - Fix the code
-   - Commit and push: `git add -A && git commit -m "address review feedback" && git push`
-   - Copilot re-reviews on new push. Repeat from step 4.
+   - Commit and push
+   - Go back to step 2 (CI re-runs, Copilot re-reviews)
 6. If CI passes and no unresolved comments: `gh pr merge --squash --delete-branch`
 
-Do not merge if CI is failing. Fix the issue first.
+**This is a continuous loop — do not stop and ask the user between steps.** Keep polling and fixing until the PR is merged or a problem requires user input.
 
 ## Next.js Notes
 
