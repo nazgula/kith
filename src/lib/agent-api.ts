@@ -9,8 +9,14 @@ export interface AgentCallParams {
   messages: { role: "user" | "assistant"; content: string }[];
 }
 
+const ALLOWED_PROMPTS = new Set(["spec-writer.md", "spec-judge.md"]);
+
 export async function callAgent(params: AgentCallParams): Promise<string> {
   const { agentPromptFile, messages } = params;
+
+  if (!ALLOWED_PROMPTS.has(agentPromptFile)) {
+    throw new Error(`Unknown agent prompt file: ${agentPromptFile}`);
+  }
 
   const promptPath = path.join(AGENTS_DIR, agentPromptFile);
   if (!fs.existsSync(promptPath)) {

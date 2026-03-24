@@ -11,7 +11,14 @@ function ensureDir(dir: string) {
   }
 }
 
+function validateId(id: string) {
+  if (!/^[a-f0-9-]{36}$/.test(id)) {
+    throw new Error(`Invalid project ID: ${id}`);
+  }
+}
+
 function projectDir(projectId: string): string {
+  validateId(projectId);
   return path.join(DATA_DIR, "projects", projectId);
 }
 
@@ -112,10 +119,12 @@ export function saveOverrideSpec(projectId: string, markdown: string) {
 }
 
 export function loadApprovedSpec(projectId: string): string | null {
-  const filePath = path.join(projectDir(projectId), "spec-approved.md");
-  if (fs.existsSync(filePath)) return fs.readFileSync(filePath, "utf-8");
-  const overridePath = path.join(projectDir(projectId), "spec-override.md");
+  const dir = projectDir(projectId);
+  // Override takes precedence over Judge-approved
+  const overridePath = path.join(dir, "spec-override.md");
   if (fs.existsSync(overridePath)) return fs.readFileSync(overridePath, "utf-8");
+  const approvedPath = path.join(dir, "spec-approved.md");
+  if (fs.existsSync(approvedPath)) return fs.readFileSync(approvedPath, "utf-8");
   return null;
 }
 

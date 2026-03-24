@@ -37,6 +37,6 @@ describe("POST /api/chat", () => {
     }));
     expect(res.status).toBe(500);
     const data = await res.json();
-    expect(data.error).toContain("not found");
+    expect(data.error).toContain("Unknown agent prompt file");
   });
 });

@@ -12,9 +12,25 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function renderMarkdown(md: string): string {
-  // Minimal markdown → HTML (headings, bold, lists, code blocks, paragraphs)
-  return md
+  // Escape HTML first to prevent XSS, then apply markdown formatting
+  let html = escapeHtml(md);
+
+  // Code blocks (before other replacements to preserve content)
+  html = html.replace(/```[\s\S]*?```/g, (match) => {
+    const code = match.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
+    return `<pre class="bg-zinc-100 dark:bg-zinc-800 rounded p-3 text-xs overflow-x-auto my-2"><code>${code}</code></pre>`;
+  });
+
+  return html
     .replace(/^#### (.+)$/gm, '<h4 class="text-sm font-semibold mt-4 mb-1">$1</h4>')
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-5 mb-2">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-6 mb-2 border-b border-zinc-200 dark:border-zinc-700 pb-1">$1</h2>')
@@ -22,10 +38,6 @@ function renderMarkdown(md: string): string {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/^- \[ \] (.+)$/gm, '<div class="flex items-start gap-2 ml-2"><input type="checkbox" disabled class="mt-1" /><span>$1</span></div>')
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/```[\s\S]*?```/g, (match) => {
-      const code = match.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
-      return `<pre class="bg-zinc-100 dark:bg-zinc-800 rounded p-3 text-xs overflow-x-auto my-2"><code>${code}</code></pre>`;
-    })
     .replace(/\n\n/g, '<br class="my-2" />');
 }
 

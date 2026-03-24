@@ -22,7 +22,7 @@ function makeMsg(
   };
 }
 
-async function callAgent(agentPromptFile: string, messages: { role: string; content: string }[]): Promise<string> {
+async function callAgent(agentPromptFile: string, messages: AgentRequest["messages"]): Promise<string> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -124,7 +124,9 @@ export function Chat() {
     if (!project) return;
     const persistable = messages.filter((m) => m.agent !== "system");
     if (persistable.length > 0) {
-      sessionAction("save-conversation", { projectId: project.id, messages: persistable });
+      sessionAction("save-conversation", { projectId: project.id, messages: persistable }).catch(
+        () => console.error("Failed to save conversation")
+      );
     }
   }, [messages, project]);
 
@@ -139,81 +141,94 @@ export function Chat() {
     }
   }, [project]);
 
-  const handleJudgeFlow = useCallback(async (specWriterResponse: string) => {
-    addMessage(makeMsg("system", "Spec draft detected. Sending to Judge..."));
+  const handleJudgeFlow = useCallback(async (initialSpecWriterResponse: string) => {
+    let currentResponse = initialSpecWriterResponse;
 
-    const specMarkdown = extractSpec(specWriterResponse);
-    lastSpecDraftRef.current = specMarkdown;
+    // Iterative loop instead of recursion to avoid deep call stack
+    while (true) {
+      addMessage(makeMsg("system", "Spec draft detected. Sending to Judge..."));
 
-    let judgeResponse: string;
-    try {
-      judgeResponse = await callAgent("spec-judge.md", [
-        { role: "user", content: specMarkdown },
-      ]);
-    } catch (err) {
-      addMessage(makeMsg("system", `Judge error: ${err instanceof Error ? err.message : "unknown"}`));
-      return;
-    }
+      const specMarkdown = extractSpec(currentResponse);
+      lastSpecDraftRef.current = specMarkdown;
 
-    const verdict = parseVerdict(judgeResponse);
+      let judgeResponse: string;
+      try {
+        judgeResponse = await callAgent("spec-judge.md", [
+          { role: "user", content: specMarkdown },
+        ]);
+      } catch (err) {
+        addMessage(makeMsg("system", `Judge error: ${err instanceof Error ? err.message : "unknown"}`));
+        return;
+      }
 
-    if (project) {
-      const judgeResult: JudgeResult = {
-        verdict: verdict.status,
-        feedback: verdict.fullResponse,
-        specMarkdown,
-        timestamp: new Date().toISOString(),
-      };
-      await sessionAction("save-judge-result", { projectId: project.id, result: judgeResult });
-    }
+      const verdict = parseVerdict(judgeResponse);
 
-    addMessage(makeMsg("judge", verdict.fullResponse));
+      if (project) {
+        const judgeResult: JudgeResult = {
+          verdict: verdict.status,
+          feedback: verdict.fullResponse,
+          specMarkdown,
+          timestamp: new Date().toISOString(),
+        };
+        await sessionAction("save-judge-result", { projectId: project.id, result: judgeResult });
+      }
 
-    if (verdict.status === "APPROVED") {
-      addMessage(makeMsg("system", "Spec approved! View and download below."));
-      await handleSpecApproved(specMarkdown);
-      return;
-    }
+      addMessage(makeMsg("judge", verdict.fullResponse));
 
-    if (verdict.status === "UNKNOWN") {
-      addMessage(makeMsg("system", "Judge response format unexpected. Treating as rejection."));
-    }
+      if (verdict.status === "APPROVED") {
+        addMessage(makeMsg("system", "Spec approved! View and download below."));
+        await handleSpecApproved(specMarkdown);
+        return;
+      }
 
-    rejectionCountRef.current++;
-    if (rejectionCountRef.current >= 3) {
+      if (verdict.status === "UNKNOWN") {
+        addMessage(makeMsg("system", "Judge response format unexpected. Treating as rejection."));
+      }
+
+      rejectionCountRef.current++;
+      if (rejectionCountRef.current >= 3) {
+        addMessage(
+          makeMsg("system", `The Judge has rejected ${rejectionCountRef.current} times. Your direct input is needed on the unresolved issues above.`)
+        );
+      }
+
       addMessage(
-        makeMsg("system", `The Judge has rejected ${rejectionCountRef.current} times. Your direct input is needed on the unresolved issues above.`)
+        makeMsg("system", "Judge rejected the spec. The Spec Writer is reviewing the feedback...")
       );
-    }
 
-    addMessage(
-      makeMsg("system", "Judge rejected the spec. The Spec Writer is reviewing the feedback...")
-    );
+      const feedbackContent = `The Judge rejected your spec with this feedback:\n\n${verdict.fullResponse}\n\nAddress these issues — either by asking the user for clarification or by revising the spec directly.`;
+      const feedbackMsg = makeMsg("user", feedbackContent, "user");
+      feedbackMsg.agent = "system";
+      feedbackMsg.content = "[Judge feedback forwarded to Spec Writer]";
 
-    const feedbackContent = `The Judge rejected your spec with this feedback:\n\n${verdict.fullResponse}\n\nAddress these issues — either by asking the user for clarification or by revising the spec directly.`;
-    const feedbackMsg = makeMsg("user", feedbackContent, "user");
-    feedbackMsg.agent = "system";
-    feedbackMsg.content = "[Judge feedback forwarded to Spec Writer]";
+      // Build API messages from current ref + feedback
+      const allMsgs = [...messagesRef.current, feedbackMsg];
+      const apiMessages: AgentRequest["messages"] = allMsgs
+        .filter((m) => m.agent !== "system" || m === feedbackMsg)
+        .map((m) => ({
+          role: m.role,
+          content: m === feedbackMsg ? feedbackContent : m.content,
+        }));
 
-    const allMsgs = [...messagesRef.current, feedbackMsg];
-    const apiMessages = allMsgs
-      .filter((m) => m.agent !== "system" || m === feedbackMsg)
-      .map((m) => ({
-        role: m.role,
-        content: m === feedbackMsg ? feedbackContent : m.content,
-      }));
+      let writerResponse: string;
+      try {
+        writerResponse = await callAgent("spec-writer.md", apiMessages);
+      } catch (err) {
+        setMessages((prev) => [...prev, feedbackMsg]);
+        addMessage(makeMsg("system", `Spec Writer error: ${err instanceof Error ? err.message : "unknown"}. Type /approve to override or continue the conversation.`));
+        return;
+      }
 
-    try {
-      const writerResponse = await callAgent("spec-writer.md", apiMessages);
       const writerMsg = makeMsg("spec-writer", writerResponse);
       setMessages((prev) => [...prev, feedbackMsg, writerMsg]);
 
-      if (detectSpec(writerResponse)) {
-        await handleJudgeFlow(writerResponse);
+      if (!detectSpec(writerResponse)) {
+        // Writer asked a question instead of revising — hand back to user
+        return;
       }
-    } catch (err) {
-      setMessages((prev) => [...prev, feedbackMsg]);
-      addMessage(makeMsg("system", `Spec Writer error: ${err instanceof Error ? err.message : "unknown"}. Type /approve to override or continue the conversation.`));
+
+      // Writer produced a new spec — loop continues
+      currentResponse = writerResponse;
     }
   }, [addMessage, project, handleSpecApproved]);
 
